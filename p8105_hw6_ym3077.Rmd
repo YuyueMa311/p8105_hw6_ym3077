@@ -5,10 +5,11 @@ output: github_document
 
 ```{r}
 library(tidyverse)
+library(broom)
 library(modelr)
 library(mgcv)
 library(ggplot2)
-set.seed(1)
+library(p8105.datasets)
 ```
 
 ## Problem 1
@@ -43,7 +44,7 @@ baltimore_glm = homicides_df |>
       data = _, 
       family = binomial())
 
-baltimore_tidy = broom::tidy(baltimore_glm, conf.int = TRUE) |>
+baltimore_tidy = tidy(baltimore_glm, conf.int = TRUE) |>
   mutate(OR = exp(estimate),
          OR_low = exp(conf.low),
          OR_high = exp(conf.high))
@@ -65,7 +66,7 @@ city_OR = homicides_df |>
     model = map(data, \(df)
                 glm(solved ~ victim_age + victim_race + victim_sex, 
                     data = df, family = binomial())),
-    tidy_result = map(model, \(mod) broom::tidy(mod, conf.int = TRUE) |>
+    tidy_result = map(model, \(mod) tidy(mod, conf.int = TRUE) |>
                         mutate(
                           OR = exp(estimate),
                           OR_low = exp(conf.low),
@@ -108,43 +109,82 @@ The plot shows variation across cities in the adjusted odds ratio (OR) comparing
         
 ## Problem 2
 
-
+Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of these two quantities.
 ```{r}
-
+data("weather_df")
+set.seed(1)
 ```
 
 ```{r}
-
+weather_boot <- 
+  weather_df |> 
+  drop_na(tmax, tmin, prcp) |>
+  modelr::bootstrap(n = 5000) |>
+  mutate(
+    fit = map(strap, ~ lm(tmax ~ tmin + prcp, data = .x)),
+    r2 = map_dbl(fit, ~ broom::glance(.x)$r.squared),
+    beta_ratio = map_dbl(fit, ~ {
+      coefs <- broom::tidy(.x)
+      beta1 <- coefs |> filter(term == "tmin") |> pull(estimate)
+      beta2 <- coefs |> filter(term == "prcp") |> pull(estimate)
+      beta1 / beta2
+    })
+  ) |>
+  select(-strap, -fit)
 ```
-
-
+      
+      
+      
+Plot the distribution of your estimates, and describe these in words.
 ```{r}
-
+r2plot = weather_boot |>
+  ggplot(aes(x = r2)) +
+  geom_density() +
+  labs(
+    title = "Bootstrap Distribution of estimated R²",
+    x = "estimated R²",
+    y = "Density"
+  ) +
+  theme_minimal()
+r2plot
 ```
-
+The bootstrap distribution of R² is approximately symmetric, indicating across all repeated samples, the linear model `tmax ~ tmin + prcp` consistently explains the majority of the variability; `tmin` and `prcp` together provides a reliable prediction of `tmax`.
+      
+      
 ```{r}
-
+ratioplot = weather_boot |>
+  ggplot(aes(x = beta_ratio)) +
+  geom_density() +
+  labs(
+    title = "Bootstrap Distribution of estimated β1 / β2",
+    x = "estimated β1 / β2",
+    y = "Density"
+    ) +
+  theme_minimal()
+ratioplot
 ```
+The bootstrap distribution of estimated β1 / β2 (ratio of the coefficient on tmin to the coefficient on prcp) is left-skewed, ranging from -400 to -100; suggesting large sampling variability in the ratio of coefficients. This is expected as ratios of cofficients are often unstable especially when one coefficient is near zero.
 
-
+      
+      
+Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r² and β1 / β2 ratio
 ```{r}
-
+weather_boot |>
+  summarize(
+    r2CI_low = quantile(r2, 0.025),
+    r2CI_high = quantile(r2, 0.975),
+    ratioCI_low = quantile(beta_ratio, 0.025),
+    ratioCI_high = quantile(beta_ratio, 0.975)
+  )
 ```
-
-```{r}
-
-```
-
-
-```{r}
-
-```
-
-```{r}
-
-```
-
-
+Using 5000 bootstrap samples, the 95% confidence interval for r² is approximately: (0.935, 0.947), the 95% confidence interval for the ratio of regression coefficients β1 and β2 is: (-278,\ -126).
+    
+    
+   
+## Problem 3
+    
+    
+Load and clean the data for regression analysis (i.e. use appropriate variable names, convert numeric to factor where appropriate, check for the presence of missing data, etc.).
 ```{r}
 
 ```

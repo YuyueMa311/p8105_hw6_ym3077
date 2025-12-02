@@ -1,0 +1,173 @@
+---
+title: "p8105_hw6_ym3077"
+output: github_document
+---
+
+```{r}
+library(tidyverse)
+library(modelr)
+library(mgcv)
+library(ggplot2)
+set.seed(1)
+```
+
+## Problem 1
+
+Import the dataset.
+```{r}
+homicides_raw = 
+  read_csv("https://raw.githubusercontent.com/washingtonpost/data-homicides/refs/heads/master/homicide-data.csv")
+```
+    
+    
+Create a city_state variable (e.g. “Baltimore, MD”), and a binary variable indicating whether the homicide is solved. Omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO – these don’t report victim race. Also omit Tulsa, AL – this is a data entry mistake. For this problem, limit your analysis those for whom victim_race is white or black. Be sure that victim_age is numeric.
+```{r}
+homicides_df = homicides_raw |>
+  mutate(
+    city_state = str_c(city, ", ", state),
+    solved = as.numeric(disposition == "Closed by arrest"),
+    victim_age = as.numeric(victim_age)
+    ) |>
+  filter(
+    !(city_state %in% c("Dallas, TX", "Phoenix, AZ", "Kansas City, MO", "Tulsa, AL")),
+    victim_race %in% c("White", "Black")
+  )
+```
+    
+For the city of Baltimore, MD, use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors.     
+Save the output of glm as an R object; apply the broom::tidy to this object; and obtain the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing male victims to female victims keeping all other variables fixed.
+```{r}
+baltimore_glm = homicides_df |>
+  filter(city_state == "Baltimore, MD") |>
+  glm(solved ~ victim_age + victim_race + victim_sex,
+      data = _, 
+      family = binomial())
+
+baltimore_tidy = broom::tidy(baltimore_glm, conf.int = TRUE) |>
+  mutate(OR = exp(estimate),
+         OR_low = exp(conf.low),
+         OR_high = exp(conf.high))
+
+baltimore_sexOR = baltimore_tidy |>
+  filter(term == "victim_sexMale") |>
+  select(term, OR, OR_low, OR_high) |>
+  knitr::kable(digits = 3)
+baltimore_sexOR
+```
+In Baltimore, after adjusting for victim age and race, the estimated odds of solved homicide are substantially lower for male victims compared with female victims. The adjusted odds ratio is 0.426 (95% CI: 0.324–0.558), indicating that homicides involving male victims have approximately 57% lower odds of being resolved. Because the confidence interval does not include 1, this association is statistically significant.
+    
+    
+Now run `glm` for each of the cities in your dataset, and extract the adjusted odds ratio (and CI) for solving homicides comparing male victims to female victims. Do this within a “tidy” pipeline, making use of `purrr::map`, list columns, and `unnest` as necessary to create a dataframe with estimated ORs and CIs for each city.
+```{r}
+city_OR = homicides_df |>
+  nest(data = -city_state) |>
+  mutate(
+    model = map(data, \(df)
+                glm(solved ~ victim_age + victim_race + victim_sex, 
+                    data = df, family = binomial())),
+    tidy_result = map(model, \(mod) broom::tidy(mod, conf.int = TRUE) |>
+                        mutate(
+                          OR = exp(estimate),
+                          OR_low = exp(conf.low),
+                          OR_high = exp(conf.high))
+                        )) |>
+  select(city_state, tidy_result) |>
+  unnest(tidy_result) |>
+  filter(term == "victim_sexMale") |>
+  select(city_state, OR, OR_low, OR_high)
+
+knitr::kable(city_OR, digits = 3)
+```
+    
+    
+    
+Create a plot that shows the estimated ORs and CIs for each city. Organize cities according to estimated OR, and comment on the plot.
+```{r}
+city_OR_plot = city_OR |>
+  mutate(
+    city_state = fct_reorder(city_state, OR)) |>
+  ggplot(aes(x = city_state, y = OR)) + 
+  geom_point() +
+  geom_errorbar(aes(ymin = OR_low, ymax = OR_high), width = 0.1) +
+  coord_flip() +
+  labs(
+    x = "City", 
+    y = "Adjusted OR (Male vs. Female victim)",
+    title = "Adjusted ORs and 95% CIs for homicide being solved: male vs female victims"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 8), 
+    plot.title = element_text(face = "bold", size = 11, hjust = 0.5)   
+  )
+city_OR_plot
+```
+The plot shows variation across cities in the adjusted odds ratio (OR) comparing the probability that male versus female homicide victims have their cases solved, after controlling for victim age and race. In general, Male homicide victims are less likely to have their cases solved than female victims (OR less than 1) in most cities, even after accounting for age and race. A few cities deviate from this pattern, but uncertainty is high in many of those cases.
+      
+      
+        
+## Problem 2
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+

@@ -135,7 +135,7 @@ weather_boot <-
       
       
       
-Plot the distribution of your estimates, and describe these in words.
+Plot the distribution of your estimates, and describe these in words.     
 ```{r}
 r2plot = weather_boot |>
   ggplot(aes(x = r2)) +
@@ -148,9 +148,9 @@ r2plot = weather_boot |>
   theme_minimal()
 r2plot
 ```
-The bootstrap distribution of R² is approximately symmetric, indicating across all repeated samples, the linear model `tmax ~ tmin + prcp` consistently explains the majority of the variability; `tmin` and `prcp` together provides a reliable prediction of `tmax`.
+The bootstrap distribution of R² is approximately symmetric, indicating across all repeated samples, the linear model `tmax ~ tmin + prcp` consistently explains the majority of the variability; `tmin` and `prcp` together provides a reliable prediction of `tmax`.      
       
-      
+            
 ```{r}
 ratioplot = weather_boot |>
   ggplot(aes(x = beta_ratio)) +
@@ -186,22 +186,93 @@ Using 5000 bootstrap samples, the 95% confidence interval for r² is approximate
     
 Load and clean the data for regression analysis (i.e. use appropriate variable names, convert numeric to factor where appropriate, check for the presence of missing data, etc.).
 ```{r}
-
+birthweight = read_csv("data/birthweight.csv") |>
+  mutate(
+    babysex = factor(babysex, 
+                     levels = c(1,2), labels = c("male", "female")),
+    frace = factor(frace, 
+                   levels = c(1,2,3,4,8,9), 
+                   labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown")),
+    mrace = factor(mrace, 
+                   levels = c(1,2,3,4,8), 
+                   labels = c("White", "Black", "Asian", "Puerto Rican", "Other")),
+    malform = factor(malform, 
+                     levels = c(0,1),
+                     labels = c("absent", "present"))
+  ) |>
+  drop_na()
+birthweight
 ```
-
+        
+        
+Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process
 ```{r}
-
+bw_mod = lm(bwt ~ blength + bhead + gaweeks + momage + 
+              smoken + ppbmi + ppwt + wtgain, data = birthweight)
+summary(bw_mod)
 ```
-
-
+Birthweight can be determined by fetal size, gestational development, and maternal health beahviors and characteristics. Based on that I followed a hypothesis-driven modeling appproach focusing on relevant predictors: 
+- fetal size indicators: `blength` (baby’s length at birth) and `bhead` (baby’s head circumference at birth); 
+- gestational development: `gaweeks` (gestational age in weeks);
+- maternal characteristics and behavior indicators: `momage` (mother’s age at delivery), `smoken` (average number of cigarettes smoked per day during pregnancy), `ppbmi` (mother’s pre-pregnancy BMI), `ppwt` (mother’s pre-pregnancy weight), `wtgain` (mother’s weight gain during pregnancy)
+      
+      
 ```{r}
-
+birthweight |>
+  add_predictions(bw_mod) |>
+  add_residuals(bw_mod) |>
+  ggplot(aes(x = pred, y = resid)) +
+  geom_point(size = 0.5) +
+  labs(
+    x = "Fitted values",
+    y = "Residuals",
+    title = "Residuals vs Fitted Values for Birthweight Model"
+  ) +
+  theme_minimal()
 ```
-
+This plot shows no strong nonlinear pattern between residuals and fitted values, suggesting the linear model is mostly appropriate. There is mild heteroscedasticity with larger residuals spread at higher fitted values. There is some outliers but most residuals cluster around zero without obvious structure. Overall, the model is reasonable though variance is not perfectly constant across fitted values.
+      
+      
+Compare your model to two others:     
+- One using length at birth and gestational age as predictors (main effects only)      
+- One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
 ```{r}
+bw_mod = lm(bwt ~ blength + bhead + gaweeks + momage + 
+              smoken + ppbmi + ppwt + wtgain, data = birthweight)
 
+main_mod = lm(bwt ~ blength + gaweeks, data = birthweight)
+
+int_mod = lm(bwt ~ bhead * blength * babysex, data = birthweight)
 ```
+      
+      
+Make this comparison in terms of the cross-validated prediction error; use `crossv_mc` and functions in `purrr` as appropriate.
+```{r}
+cv_bw = 
+  crossv_mc(birthweight, n = 100) |>
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble),
+    
+    fit_bw = map(train, \(df) lm(bwt ~ blength + bhead + gaweeks + momage + 
+              smoken + ppbmi + ppwt + wtgain, data = df)),
+    fit_main = map(train, \(df) lm(bwt ~ blength + gaweeks, data = df)),
+    fit_int = map(train, \(df) lm(bwt ~ bhead * blength * babysex, data = df)), 
+    
+    rmse_bw = map2_dbl(fit_bw, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_main = map2_dbl(fit_main, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_int = map2_dbl(fit_int, test, \(mod, df) rmse(model = mod, data = df))
+  )
 
+cv_result = cv_bw |>
+  select(starts_with("rmse")) |>
+  summarize(
+    rmse_bw = mean(rmse_bw),
+    rmse_main = mean(rmse_main),
+    rmse_int = mean(rmse_int)
+  )
+cv_result
+```
 
 
 
